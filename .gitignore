@@ -1,0 +1,19 @@
+# Build and deployment output
+**/bin/
+**/obj/
+**/artifacts/
+**/publish/
+publish.zip
+
+# Local IDE settings
+.vs/
+*.user
+*.pubxml.user
+
+# Environment files and local Azure deployment credentials
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
+**/.azure/
+*.publishsettings
