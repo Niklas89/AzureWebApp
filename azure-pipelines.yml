@@ -1,0 +1,45 @@
+# Build on pushes to master.
+trigger:
+  branches:
+    include:
+      - master
+
+# For GitHub repositories. Azure Repos uses a branch build-validation policy.
+pr:
+  branches:
+    include:
+      - master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  buildConfiguration: Release
+  project: Server/AzureWebApp.Server.csproj
+
+steps:
+  - checkout: self
+
+  - task: UseDotNet@2
+    displayName: Setup .NET
+    inputs:
+      packageType: sdk
+      version: '10.0.x'
+
+  - script: dotnet restore "$(project)"
+    displayName: Restore dependencies
+
+  - script: dotnet build "$(project)" --configuration "$(buildConfiguration)" --no-restore
+    displayName: Build
+
+  - script: dotnet test "$(project)" --configuration "$(buildConfiguration)" --no-build --verbosity normal
+    displayName: Test
+
+  - script: dotnet publish "$(project)" --configuration "$(buildConfiguration)" --no-build --output "$(Build.ArtifactStagingDirectory)/out"
+    displayName: Publish
+
+  - task: PublishPipelineArtifact@1
+    displayName: Upload published app
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)/out'
+      artifact: drop
