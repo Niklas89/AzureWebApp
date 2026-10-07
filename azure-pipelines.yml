@@ -1,21 +1,16 @@
-# Build on pushes to master.
+# Build on pushes to main.
 trigger:
   branches:
     include:
-      - master
-
-# For GitHub repositories. Azure Repos uses a branch build-validation policy.
-pr:
-  branches:
-    include:
-      - master
+      - main
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: 'windows-latest'
+  # The screenshots use name: 'Default' for a self-hosted pool.
+  # Microsoft-hosted agents use vmImage without a pool name.
 
 variables:
   buildConfiguration: Release
-  project: Server/AzureWebApp.Server.csproj
 
 steps:
   - checkout: self
@@ -26,20 +21,50 @@ steps:
       packageType: sdk
       version: '10.0.x'
 
-  - script: dotnet restore "$(project)"
+  - task: DotNetCoreCLI@2
     displayName: Restore dependencies
+    inputs:
+      command: 'restore'
+      projects: '**/*.csproj'
 
-  - script: dotnet build "$(project)" --configuration "$(buildConfiguration)" --no-restore
+  - task: DotNetCoreCLI@2
     displayName: Build
+    inputs:
+      command: 'build'
+      arguments: '--configuration $(buildConfiguration) --no-restore'
+      projects: '**/*.csproj'
 
-  - script: dotnet test "$(project)" --configuration "$(buildConfiguration)" --no-build --verbosity normal
+  - task: DotNetCoreCLI@2
     displayName: Test
+    inputs:
+      command: 'test'
+      projects: '**/*.csproj'
+      arguments: '--configuration $(buildConfiguration) --no-build --verbosity normal'
 
-  - script: dotnet publish "$(project)" --configuration "$(buildConfiguration)" --no-build --output "$(Build.ArtifactStagingDirectory)/out"
+  - task: DotNetCoreCLI@2
     displayName: Publish
+    inputs:
+      command: 'publish'
+      publishWebProjects: false
+      # Publish the hosted server, which includes the Blazor client.
+      projects: 'Server/AzureWebApp.Server.csproj'
+      arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+      zipAfterPublish: true
 
-  - task: PublishPipelineArtifact@1
+  - task: PublishBuildArtifacts@1
     displayName: Upload published app
     inputs:
-      targetPath: '$(Build.ArtifactStagingDirectory)/out'
-      artifact: drop
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      ArtifactName: 'drop'
+      publishLocation: 'Container'
+
+  - task: AzureWebApp@1
+    displayName: Deploy to Azure App Service
+    # Deploy only successful builds of main, excluding pull-request validation.
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    inputs:
+      # Azure Resource Manager service connection name in Azure DevOps.
+      azureSubscription: 'MyResourceGroup'
+      appType: 'webApp'
+      appName: 'NiklasAzureWebApp'
+      package: '$(Build.ArtifactStagingDirectory)/**/*.zip'
