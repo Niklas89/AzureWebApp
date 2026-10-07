@@ -1,0 +1,35 @@
+name: .NET Build and Deploy
+
+on: #anytime these two events push and pull occur on the master branch, this workflow will be triggered
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  build: # on any push or pull request to the master branch, this app will be built and the steps will run on the latest version of Ubuntu
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore Server/AzureWebApp.Server.csproj
+
+      - name: Build
+        run: dotnet build Server/AzureWebApp.Server.csproj --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test Server/AzureWebApp.Server.csproj --configuration Release --no-build --verbosity normal
+
+      - name: Publish
+        run: dotnet publish Server/AzureWebApp.Server.csproj -c Release --no-build -o out
