@@ -4,6 +4,13 @@ trigger:
     include:
       - master
 
+# Validate pull requests targeting master, including Dependabot NuGet updates.
+# Deployment is skipped for PR runs; merging to master triggers deployment.
+pr:
+  branches:
+    include:
+      - master
+
 pool:
   vmImage: 'windows-latest'
   # The screenshots use name: 'Default' for a self-hosted pool.
@@ -12,59 +19,81 @@ pool:
 variables:
   buildConfiguration: Release
 
-steps:
-  - checkout: self
+stages:
+  - stage: Build
+    jobs:
+      - job: BuildApp
+        steps:
+          - checkout: self
 
-  - task: UseDotNet@2
-    displayName: Setup .NET
-    inputs:
-      packageType: sdk
-      version: '10.0.x'
+          - task: UseDotNet@2
+            displayName: Setup .NET
+            inputs:
+              packageType: sdk
+              version: '10.0.x'
 
-  - task: DotNetCoreCLI@2
-    displayName: Restore dependencies
-    inputs:
-      command: 'restore'
-      projects: '**/*.csproj'
+          - task: DotNetCoreCLI@2
+            displayName: Restore dependencies
+            inputs:
+              command: 'restore'
+              projects: '**/*.csproj'
 
-  - task: DotNetCoreCLI@2
-    displayName: Build
-    inputs:
-      command: 'build'
-      arguments: '--configuration $(buildConfiguration) --no-restore'
-      projects: '**/*.csproj'
+          - task: DotNetCoreCLI@2
+            displayName: Build
+            inputs:
+              command: 'build'
+              arguments: '--configuration $(buildConfiguration) --no-restore'
+              projects: '**/*.csproj'
 
-  - task: DotNetCoreCLI@2
-    displayName: Test
-    inputs:
-      command: 'test'
-      projects: '**/*.csproj'
-      arguments: '--configuration $(buildConfiguration) --no-build --verbosity normal'
+          - task: DotNetCoreCLI@2
+            displayName: Test
+            inputs:
+              command: 'test'
+              projects: '**/*.csproj'
+              arguments: '--configuration $(buildConfiguration) --no-build --verbosity normal'
 
-  - task: DotNetCoreCLI@2
-    displayName: Publish
-    inputs:
-      command: 'publish'
-      publishWebProjects: false
-      # Publish the hosted server, which includes the Blazor client.
-      projects: 'Server/AzureWebApp.Server.csproj'
-      arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
-      zipAfterPublish: true
+          - task: DotNetCoreCLI@2
+            displayName: Publish
+            inputs:
+              command: 'publish'
+              publishWebProjects: false
+              # Publish the hosted server, which includes the Blazor client.
+              projects: 'Server/AzureWebApp.Server.csproj'
+              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+              zipAfterPublish: true
 
-  - task: PublishBuildArtifacts@1
-    displayName: Upload published app
-    inputs:
-      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-      ArtifactName: 'drop'
-      publishLocation: 'Container'
+          - task: PublishBuildArtifacts@1
+            displayName: Upload published app
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
 
-  - task: AzureWebApp@1
-    displayName: Deploy to Azure App Service
-    # Deploy only successful builds of master, excluding pull-request validation.
+  - stage: Deploy
+    dependsOn: Build
+    # Deploy successful master builds only, excluding pull-request validation.
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'), ne(variables['Build.Reason'], 'PullRequest'))
-    inputs:
-      # Azure Resource Manager service connection name in Azure DevOps.
-      azureSubscription: 'MyResourceGroup'
-      appType: 'webApp'
-      appName: 'NiklasAzureWebApp'
-      package: '$(Build.ArtifactStagingDirectory)/**/*.zip'
+    jobs:
+      - deployment: DeployApp
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: drop
+
+                - task: AzureWebApp@1
+                  displayName: Deploy to Azure App Service
+                  inputs:
+                    azureSubscription: 'MyResourceGroup'
+                    appType: 'webApp'
+                    appName: 'NiklasAzureWebApp'
+                    package: '$(Pipeline.Workspace)/drop/**/*.zip'
+
+            on:
+              failure:
+                steps:
+                  # Placeholder only: this message does not restore a previous build.
+                  - script: echo "Rolling back to previous build..."
+                    displayName: Rollback placeholder
