@@ -1,8 +1,8 @@
-# Build on pushes to main.
+# Build on pushes to master.
 trigger:
   branches:
     include:
-      - main
+      - master
 
 pool:
   vmImage: 'windows-latest'
@@ -60,8 +60,8 @@ steps:
 
   - task: AzureWebApp@1
     displayName: Deploy to Azure App Service
-    # Deploy only successful builds of main, excluding pull-request validation.
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    # Deploy only successful builds of master, excluding pull-request validation.
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'), ne(variables['Build.Reason'], 'PullRequest'))
     inputs:
       # Azure Resource Manager service connection name in Azure DevOps.
       azureSubscription: 'MyResourceGroup'
