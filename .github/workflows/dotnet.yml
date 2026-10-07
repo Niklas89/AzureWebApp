@@ -1,6 +1,6 @@
 name: .NET Build and Deploy
 
-on: #anytime these two events push and pull occur on the master branch, this workflow will be triggered
+on: #an Event: anytime these two events push and pull occur on the master branch, this workflow will be triggered
   push:
     branches: [ master ]
   pull_request:
